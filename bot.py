@@ -33,11 +33,13 @@ def get_sheet():
 MIJOZ, BUYURTMA, SUMMA, IZOH = range(4)
 TOLANDI_MIJOZ = range(4, 5)
 
+def main_keyboard():
+    return ReplyKeyboardMarkup([["/yangi", "/tolandi"], ["/royxat", "/hisobot"]], resize_keyboard=True)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["/yangi", "/tolandi"], ["/royxat", "/hisobot"]]
     await update.message.reply_text(
-        "Salom! Poligrafiya qarz boti.\n\n/yangi — yangi qarz kiritish\n/tolandi — tolov qilindi\n/royxat — barcha qarzlar\n/hisobot — haftalik hisobot",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        "Salom! Poligrafiya qarz boti.\n\n/yangi - yangi qarz\n/tolandi - tolov belgilash\n/royxat - qarzlar royxati\n/hisobot - haftalik hisobot",
+        reply_markup=main_keyboard()
     )
 
 async def yangi_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,7 +62,7 @@ async def yangi_summa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         summa = int(update.message.text.replace(" ", "").replace(",", ""))
         context.user_data["summa"] = summa
     except ValueError:
-        await update.message.reply_text("Iltimos, faqat raqam kiriting:")
+        await update.message.reply_text("Faqat raqam kiriting:")
         return SUMMA
     await update.message.reply_text("Izoh kiriting (yoki - yozing):")
     return IZOH
@@ -76,18 +78,16 @@ async def yangi_izoh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         sheet = get_sheet()
         sheet.append_row([mijoz, buyurtma, summa, sana, "Tolanmagan", izoh])
-        keyboard = [["/yangi", "/tolandi"], ["/royxat", "/hisobot"]]
         await update.message.reply_text(
             f"Saqlandi!\n\nMijoz: {mijoz}\nBuyurtma: {buyurtma}\nSumma: {summa:,} som\nSana: {sana}\nHolat: Tolanmagan",
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            reply_markup=main_keyboard()
         )
     except Exception as e:
         await update.message.reply_text(f"Xatolik: {e}")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["/yangi", "/tolandi"], ["/royxat", "/hisobot"]]
-    await update.message.reply_text("Bekor qilindi.", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+    await update.message.reply_text("Bekor qilindi.", reply_markup=main_keyboard())
     return ConversationHandler.END
 
 async def tolandi_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -96,7 +96,7 @@ async def tolandi_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         records = sheet.get_all_records()
         tolanmaganlar = [(i+2, r) for i, r in enumerate(records) if r.get("Holat", "") == "Tolanmagan"]
         if not tolanmaganlar:
-            await update.message.reply_text("Barcha qarzlar tolangan!")
+            await update.message.reply_text("Barcha qarzlar tolangan!", reply_markup=main_keyboard())
             return ConversationHandler.END
         context.user_data["tolanmaganlar"] = tolanmaganlar
         keyboard = [[f"{r['Mijoz']} - {r['Summa']:,} som"] for _, r in tolanmaganlar]
@@ -118,11 +118,7 @@ async def tolandi_mijoz(update: Update, context: ContextTypes.DEFAULT_TYPE):
             label = f"{r['Mijoz']} - {r['Summa']:,} som"
             if label == tanlangan:
                 sheet.update_cell(row_num, 5, "Tolangan")
-                keyboard = [["/yangi", "/tolandi"], ["/royxat", "/hisobot"]]
-                await update.message.reply_text(
-                    f"{r['Mijoz']} - {r['Summa']:,} som tolangan deb belgilandi!",
-                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                )
+                await update.message.reply_text(f"{r['Mijoz']} tolangan deb belgilandi!", reply_markup=main_keyboard())
                 return ConversationHandler.END
         await update.message.reply_text("Topilmadi, qaytadan tanlang.")
         return TOLANDI_MIJOZ
@@ -167,40 +163,15 @@ async def hisobot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Haftalik hisobot ({datetime.now().strftime('%d.%m.%Y')})\n\n"
             f"Bu hafta kiritilgan: {bu_hafta_yangi:,} som\n"
             f"Bu hafta tolangan: {bu_hafta_tolangan:,} som\n"
-            f"Umumiy qoldiq qarz: {jami_qarz:,} som"
+            f"Umumiy qoldiq: {jami_qarz:,} som"
         )
         await update.message.reply_text(matn)
     except Exception as e:
         await update.message.reply_text(f"Xatolik: {e}")
 
-async def haftalik_hisobot_avtomatik(context: ContextTypes.DEFAULT_TYPE):
-    try:
-        sheet = get_sheet()
-        records = sheet.get_all_records()
-        hafta_oldin = datetime.now() - timedelta(days=7)
-        bu_hafta = []
-        for r in records:
-            try:
-                sana = datetime.strptime(r["Sana"], "%d.%m.%Y")
-                if sana >= hafta_oldin:
-                    bu_hafta.append(r)
-            except:
-                pass
-        jami_qarz = sum(r.get("Summa", 0) for r in records if r.get("Holat") == "Tolanmagan")
-        bu_hafta_tolangan = sum(r.get("Summa", 0) for r in bu_hafta if r.get("Holat") == "Tolangan")
-        bu_hafta_yangi = sum(r.get("Summa", 0) for r in bu_hafta if r.get("Holat") == "Tolanmagan")
-        matn = (
-            f"Avtomatik haftalik hisobot ({datetime.now().strftime('%d.%m.%Y')})\n\n"
-            f"Bu hafta kiritilgan: {bu_hafta_yangi:,} som\n"
-            f"Bu hafta tolangan: {bu_hafta_tolangan:,} som\n"
-            f"Umumiy qoldiq qarz: {jami_qarz:,} som"
-        )
-        await context.bot.send_message(chat_id=DIRECTOR_CHAT_ID, text=matn)
-    except Exception as e:
-        logger.error(f"Hisobot xatolik: {e}")
-
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
+
     yangi_conv = ConversationHandler(
         entry_points=[CommandHandler("yangi", yangi_start)],
         states={
@@ -211,6 +182,7 @@ def main():
         },
         fallbacks=[CommandHandler("bekor", cancel)]
     )
+
     tolandi_conv = ConversationHandler(
         entry_points=[CommandHandler("tolandi", tolandi_start)],
         states={
@@ -218,14 +190,15 @@ def main():
         },
         fallbacks=[CommandHandler("bekor", cancel)]
     )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(yangi_conv)
     app.add_handler(tolandi_conv)
     app.add_handler(CommandHandler("royxat", royxat))
     app.add_handler(CommandHandler("hisobot", hisobot))
-    app.job_queue.run_repeating(haftalik_hisobot_avtomatik, interval=timedelta(weeks=1), first=timedelta(seconds=10))
+
     logger.info("Bot ishga tushdi!")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
